@@ -55,7 +55,789 @@ import openpyxl
 from multi_file_input.config import Config
 from content_sampler.noise_labeler import NoiseLabeler
 from multi_file_input.adapters import YAMLAdapter
+from value_add_layer import (
+    ValueAddPipeline,
+    DataEnricher,
+    DataTransformer,
+    DataValidator,
+    DataAggregator,
+    CalculateRule,
+    CategoryMapRule,
+    LookupRule,
+    DateExtractRule,
+    ConditionalRule,
+    DeriveRule,
+    DataReshaper,
+    Normalizer,
+    CategoricalEncoder,
+    RequiredRule,
+    TypeRule,
+    RangeRule,
+    PatternRule,
+    EnumRule,
+    CustomRule,
+    CrossFieldRule,
+    UniqueRule,
+    ProcessingResult,
+)
+from value_add_layer.errors import (
+    ValueAddError,
+    EnrichmentError,
+    TransformationError,
+    ValidationError as ValueAddValidationError,
+    AggregationError,
+)
 
+
+# ============================================================================
+# VALUE ADD LAYER: ENRICHER TESTS
+# ============================================================================
+
+class TestDataEnricher:
+    """Test DataEnricher - adding computed and lookup-based fields."""
+
+    def test_calculate_rule(self):
+        """Test CalculateRule - compute from expression."""
+        enricher = DataEnricher()
+        records = [
+            {"quantity": 5, "unit_price": 10},
+            {"quantity": 3, "unit_price": 20},
+        ]
+        rules = [CalculateRule("total", "quantity * unit_price")]
+        result = enricher.enrich(records, rules)
+
+        assert result[0]["total"] == 50
+        assert result[1]["total"] == 60
+
+    def test_calculate_rule_with_expression(self):
+        """Test CalculateRule with more complex expression."""
+        enricher = DataEnricher()
+        records = [{"price": 100, "tax_rate": 0.1}]
+        rules = [CalculateRule("total_with_tax", "price * (1 + tax_rate)")]
+        result = enricher.enrich(records, rules)
+
+        assert result[0]["total_with_tax"] == pytest.approx(110.0)
+
+    def test_category_map_rule(self):
+        """Test CategoryMapRule - map values to categories."""
+        enricher = DataEnricher()
+        records = [
+            {"age": 15},
+            {"age": 25},
+            {"age": 45},
+            {"age": 70},
+        ]
+        rules = [
+            CategoryMapRule(
+                "age_group", "age",
+                [(0, 18), (18, 35), (35, 55), (55, 100)],
+                ["minor", "young_adult", "adult", "senior"]
+            )
+        ]
+        result = enricher.enrich(records, rules)
+
+        assert result[0]["age_group"] == "minor"
+        assert result[1]["age_group"] == "young_adult"
+        assert result[2]["age_group"] == "adult"
+        assert result[3]["age_group"] == "senior"
+
+    def test_lookup_rule(self):
+        """Test LookupRule - add data from lookup source."""
+        enricher = DataEnricher()
+        records = [{"postal_code": "1001"}, {"postal_code": "1002"}]
+        lookup_source = {
+            "1001": {"region": "North", "country": "USA"},
+            "1002": {"region": "South", "country": "USA"},
+        }
+        rules = [
+            LookupRule("region", lookup_source, "postal_code", ["region", "country"])
+        ]
+        result = enricher.enrich(records, rules)
+
+        assert result[0]["region"] == "North"
+        assert result[1]["region"] == "South"
+
+    def test_enrich_with_multiple_rules(self):
+        """Test enriching with multiple rules."""
+        enricher = DataEnricher()
+        records = [
+            {"quantity": 5, "unit_price": 10, "discount": 0.1},
+        ]
+        rules = [
+            CalculateRule("subtotal", "quantity * unit_price"),
+            CalculateRule("discount_amount", "subtotal * discount"),
+            CalculateRule("total", "subtotal - discount_amount"),
+        ]
+        result = enricher.enrich(records, rules)
+
+        assert result[0]["subtotal"] == 50
+        assert result[0]["discount_amount"] == 5.0
+        assert result[0]["total"] == 45.0
+
+
+class TestDataTransformer:
+    """Test DataTransformer - normalization, encoding, and reshaping."""
+
+    def test_normalize_min_max(self):
+        """Test min-max normalization."""
+        transformer = DataTransformer()
+        records = [
+            {"value": 0},
+            {"value": 50},
+            {"value": 100},
+        ]
+        result = transformer.transform(records, "normalize", {"fields": ["value"], "method": "min_max"})
+
+        assert len(result) == 3
+
+    def test_encode_label(self):
+        """Test label encoding."""
+        transformer = DataTransformer()
+        records = [
+            {"status": "active"},
+            {"status": "pending"},
+            {"status": "active"},
+        ]
+        result = transformer.transform(records, "encode", {"field": "status", "method": "label"})
+
+        assert all("status_encoded" in r for r in result)
+
+    def test_encode_one_hot(self):
+        """Test one-hot encoding."""
+        transformer = DataTransformer()
+        records = [
+            {"color": "red"},
+            {"color": "blue"},
+            {"color": "red"},
+        ]
+        result = transformer.transform(records, "encode", {"field": "color", "method": "one_hot"})
+
+        assert any("color_red" in r for r in result)
+        assert any("color_blue" in r for r in result)
+
+    def test_filter_records(self):
+        """Test filtering records by condition."""
+        transformer = DataTransformer()
+        records = [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": 25},
+            {"name": "Charlie", "age": 35},
+        ]
+        result = transformer.transform(records, "filter", {"condition": "age >= 30"})
+
+        assert len(result) == 2
+        assert result[0]["name"] == "Alice"
+        assert result[1]["name"] == "Charlie"
+
+
+class TestDataReshaper:
+    """Test DataReshaper - reshaping operations."""
+
+    def test_pivot(self):
+        """Test pivot operation."""
+        reshaper = DataReshaper()
+        records = [
+            {"region": "North", "product": "A", "sales": 100},
+            {"region": "North", "product": "B", "sales": 200},
+            {"region": "South", "product": "A", "sales": 150},
+        ]
+        result = reshaper.pivot(records, "region", "product", "sales")
+
+        assert len(result) == 2
+
+    def test_melt(self):
+        """Test melt operation."""
+        reshaper = DataReshaper()
+        records = [
+            {"id": 1, "price": 100, "quantity": 5},
+            {"id": 2, "price": 200, "quantity": 3},
+        ]
+        result = reshaper.melt(records, ["id"], ["price", "quantity"])
+
+        assert len(result) == 4
+
+    def test_nest(self):
+        """Test nest operation."""
+        reshaper = DataReshaper()
+        records = [
+            {"category": "A", "item": "x", "value": 1},
+            {"category": "A", "item": "y", "value": 2},
+            {"category": "B", "item": "z", "value": 3},
+        ]
+        result = reshaper.nest(records, "category", ["item", "value"])
+
+        assert len(result) == 2
+        assert result[0]["key"] == "A"
+        assert len(result[0]["items"]) == 2
+
+
+class TestNormalizer:
+    """Test Normalizer - normalization strategies."""
+
+    def test_min_max_scale(self):
+        """Test min-max scaling."""
+        normalizer = Normalizer()
+        values = [0, 50, 100]
+        scaled = normalizer.min_max_scale(values)
+
+        assert scaled[0] == 0.0
+        assert scaled[1] == 0.5
+        assert scaled[2] == 1.0
+
+    def test_min_max_scale_constant(self):
+        """Test min-max scaling with constant values."""
+        normalizer = Normalizer()
+        values = [5, 5, 5]
+        scaled = normalizer.min_max_scale(values)
+
+        assert all(s == 0.5 for s in scaled)
+
+    def test_z_score_scale(self):
+        """Test z-score normalization."""
+        normalizer = Normalizer()
+        values = [10, 20, 30, 40, 50]
+        scaled = normalizer.z_score_scale(values)
+
+        assert abs(scaled[2]) < 0.01
+
+    def test_robust_scale(self):
+        """Test robust scaling with median and IQR."""
+        normalizer = Normalizer()
+        values = [1, 5, 10, 15, 20]
+        scaled = normalizer.robust_scale(values)
+
+        assert abs(scaled[2]) < 0.01
+
+
+class TestCategoricalEncoder:
+    """Test CategoricalEncoder - encoding strategies."""
+
+    def test_label_encode(self):
+        """Test label encoding."""
+        encoder = CategoricalEncoder()
+        values = ["cat", "dog", "cat", "bird"]
+        encoded = encoder.label_encode(values)
+
+        assert len(encoded) == 4
+        assert encoded[0] == encoded[2]
+
+    def test_one_hot_encode(self):
+        """Test one-hot encoding."""
+        encoder = CategoricalEncoder()
+        records = [{"type": "A"}, {"type": "B"}, {"type": "A"}]
+        result = encoder.one_hot_encode(records, "type")
+
+        assert len(result) == 3
+        assert result[0]["type_A"] == 1
+        assert result[0]["type_B"] == 0
+
+    def test_target_encode(self):
+        """Test target encoding."""
+        encoder = CategoricalEncoder()
+        records = [
+            {"category": "A", "value": 10},
+            {"category": "A", "value": 20},
+            {"category": "B", "value": 100},
+        ]
+        result = encoder.target_encode(records, "category", "value")
+
+        assert result["A"] == 15.0
+        assert result["B"] == 100.0
+
+
+# ============================================================================
+# VALUE ADD LAYER: VALIDATOR TESTS
+# ============================================================================
+
+class TestDataValidator:
+    """Test DataValidator - validation against rules."""
+
+    def test_required_rule(self):
+        """Test RequiredRule - field must exist."""
+        validator = DataValidator([RequiredRule("id")])
+        records = [
+            {"id": "1", "name": "Alice"},
+            {"name": "Bob"},
+        ]
+        result = validator.validate_with_details(records)
+
+        assert result["error_count"] == 1
+
+    def test_type_rule(self):
+        """Test TypeRule - field must be specific type."""
+        validator = DataValidator([TypeRule("age", int)])
+        records = [
+            {"age": 25},
+            {"age": "not_int"},
+        ]
+        result = validator.validate_with_details(records)
+
+        assert result["error_count"] == 1
+
+    def test_range_rule(self):
+        """Test RangeRule - numeric value within bounds."""
+        validator = DataValidator([RangeRule("price", min_val=0, max_val=1000)])
+        records = [
+            {"price": 500},
+            {"price": -10},
+            {"price": 2000},
+        ]
+        result = validator.validate_with_details(records)
+
+        assert result["error_count"] == 2
+
+    def test_pattern_rule(self):
+        """Test PatternRule - string matches regex."""
+        validator = DataValidator([PatternRule("email", r"^[\w.-]+@[\w.-]+\.\w+$")])
+        records = [
+            {"email": "alice@example.com"},
+            {"email": "invalid"},
+        ]
+        result = validator.validate_with_details(records)
+
+        assert result["error_count"] == 1
+
+    def test_enum_rule(self):
+        """Test EnumRule - value in allowed list."""
+        validator = DataValidator([EnumRule("status", ["active", "pending"])])
+        records = [
+            {"status": "active"},
+            {"status": "deleted"},
+        ]
+        result = validator.validate_with_details(records)
+
+        assert result["error_count"] == 1
+
+    def test_custom_rule(self):
+        """Test CustomRule - user-defined validation."""
+        validator = DataValidator([
+            CustomRule("discount", lambda x: x < 1.0, "Discount must be less than 100%")
+        ])
+        records = [
+            {"discount": 0.5},
+            {"discount": 1.5},
+        ]
+        result = validator.validate_with_details(records)
+
+        assert result["error_count"] == 1
+
+    def test_add_rule(self):
+        """Test adding rules dynamically."""
+        validator = DataValidator()
+        validator.add_rule(RequiredRule("id"))
+        validator.add_rule(TypeRule("age", int))
+
+        records = [{"id": "1", "age": 25}]
+        result = validator.validate_with_details(records)
+
+        assert result["valid"] is True
+
+    def test_remove_rule(self):
+        """Test removing rules by name."""
+        validator = DataValidator([RequiredRule("id"), RequiredRule("name")])
+        validator.remove_rule("required_name")
+
+        records = [{"id": "1"}]
+        result = validator.validate_with_details(records)
+
+        assert result["error_count"] == 0
+
+
+# ============================================================================
+# VALUE ADD LAYER: AGGREGATOR TESTS
+# ============================================================================
+
+class TestDataAggregator:
+    """Test DataAggregator - grouping and summarizing."""
+
+    def test_aggregate_sum(self):
+        """Test sum aggregation."""
+        aggregator = DataAggregator()
+        records = [
+            {"region": "North", "sales": 100},
+            {"region": "North", "sales": 200},
+            {"region": "South", "sales": 150},
+        ]
+        result = aggregator.aggregate(records, ["region"], {"total": "sum,sales"})
+
+        assert len(result) == 2
+        north_total = next(r["total"] for r in result if r["region"] == "North")
+        assert north_total == 300
+
+    def test_aggregate_count(self):
+        """Test count aggregation."""
+        aggregator = DataAggregator()
+        records = [
+            {"region": "North", "sales": 100},
+            {"region": "North", "sales": 200},
+            {"region": "South", "sales": 150},
+        ]
+        result = aggregator.aggregate(records, ["region"], {"count": "count"})
+
+        north_count = next(r["count"] for r in result if r["region"] == "North")
+        assert north_count == 2
+
+    def test_aggregate_mean(self):
+        """Test mean aggregation."""
+        aggregator = DataAggregator()
+        records = [
+            {"category": "A", "value": 10},
+            {"category": "A", "value": 20},
+            {"category": "B", "value": 100},
+        ]
+        result = aggregator.aggregate(records, ["category"], {"avg": "mean,value"})
+
+        a_avg = next(r["avg"] for r in result if r["category"] == "A")
+        assert a_avg == 15.0
+
+    def test_aggregate_min_max(self):
+        """Test min/max aggregation."""
+        aggregator = DataAggregator()
+        records = [
+            {"group": "X", "value": 5},
+            {"group": "X", "value": 15},
+            {"group": "X", "value": 10},
+        ]
+        result = aggregator.aggregate(records, ["group"], {"minimum": "min,value", "maximum": "max,value"})
+
+        x_result = result[0]
+        assert x_result["minimum"] == 5
+        assert x_result["maximum"] == 15
+
+    def test_aggregate_multiple_fields(self):
+        """Test aggregation with multiple group_by fields."""
+        aggregator = DataAggregator()
+        records = [
+            {"region": "North", "product": "A", "sales": 100},
+            {"region": "North", "product": "B", "sales": 200},
+            {"region": "South", "product": "A", "sales": 150},
+        ]
+        result = aggregator.aggregate(
+            records,
+            ["region", "product"],
+            {"total_sales": "sum,sales"}
+        )
+
+        assert len(result) == 3
+        north_a = next((r for r in result if r["region"] == "North" and r["product"] == "A"), None)
+        assert north_a["total_sales"] == 100
+
+    def test_aggregate_first_last(self):
+        """Test first/last aggregation."""
+        aggregator = DataAggregator()
+        records = [
+            {"category": "X", "order": 1, "value": "first"},
+            {"category": "X", "order": 2, "value": "middle"},
+            {"category": "X", "order": 3, "value": "last"},
+        ]
+        result = aggregator.aggregate(
+            records,
+            ["category"],
+            {"first_val": "first,value", "last_val": "last,value"}
+        )
+
+        assert result[0]["first_val"] == "first"
+        assert result[0]["last_val"] == "last"
+
+
+# ============================================================================
+# VALUE ADD LAYER: PIPELINE TESTS
+# ============================================================================
+
+class TestValueAddPipeline:
+    """Test ValueAddPipeline - complete value-add flow."""
+
+    def test_pipeline_enrich_only(self):
+        """Test pipeline with only enrichment."""
+        pipeline = ValueAddPipeline()
+        records = [{"quantity": 5, "unit_price": 10}]
+
+        result = pipeline.process(
+            records,
+            enrichment_rules=[CalculateRule("total", "quantity * unit_price")]
+        )
+
+        assert result.success
+        assert result.records[0]["total"] == 50
+        assert "enrichment" in result.steps_completed
+
+    def test_pipeline_enrich_and_validate(self):
+        """Test pipeline with enrichment and validation."""
+        pipeline = ValueAddPipeline()
+        records = [
+            {"id": "1", "quantity": 5, "unit_price": 10},
+            {"id": "2", "quantity": 3, "unit_price": 20},
+        ]
+
+        result = pipeline.process(
+            records,
+            enrichment_rules=[CalculateRule("total", "quantity * unit_price")],
+            validation_rules=[RequiredRule("id"), TypeRule("total", (int, float))]
+        )
+
+        assert result.success
+        assert "enrichment" in result.steps_completed
+        assert "validation" in result.steps_completed
+
+    def test_pipeline_with_failed_validation(self):
+        """Test pipeline with validation errors."""
+        pipeline = ValueAddPipeline()
+        records = [{"quantity": 5, "unit_price": 10}]
+
+        result = pipeline.process(
+            records,
+            enrichment_rules=[CalculateRule("total", "quantity * unit_price")],
+            validation_rules=[RequiredRule("id")]
+        )
+
+        assert not result.success
+        assert len(result.errors) > 0
+
+    def test_pipeline_with_transformation(self):
+        """Test pipeline with transformation step."""
+        pipeline = ValueAddPipeline()
+        records = [
+            {"status": "active"},
+            {"status": "pending"},
+        ]
+
+        result = pipeline.process(
+            records,
+            transformations=[("encode", {"field": "status", "method": "label"})]
+        )
+
+        assert result.success
+        assert "transformation" in result.steps_completed
+
+    def test_pipeline_full_flow(self):
+        """Test complete pipeline: enrich -> transform -> validate -> aggregate."""
+        pipeline = ValueAddPipeline()
+        records = [
+            {"region": "North", "quantity": 5, "unit_price": 10},
+            {"region": "North", "quantity": 3, "unit_price": 20},
+            {"region": "South", "quantity": 2, "unit_price": 15},
+        ]
+
+        result = pipeline.process(
+            records,
+            enrichment_rules=[CalculateRule("total", "quantity * unit_price")],
+            transformations=[("normalize", {"fields": ["total"], "method": "min_max"})],
+            validation_rules=[RequiredRule("region"), TypeRule("total", (int, float))],
+            aggregation_config={
+                "group_by": ["region"],
+                "aggregations": {"total_sales": "sum,total"}
+            }
+        )
+
+        assert result.success
+        assert len(result.steps_completed) == 4
+
+        north = next(r for r in result.records if r.get("region") == "North")
+        assert north["total_sales"] == 110
+
+
+class TestProcessingResult:
+    """Test ProcessingResult dataclass."""
+
+    def test_success_property(self):
+        """Test success property with no errors."""
+        result = ProcessingResult(records=[], errors=[])
+        assert result.success is True
+
+    def test_success_property_with_errors(self):
+        """Test success property with errors."""
+        result = ProcessingResult(records=[], errors=[{"message": "error"}])
+        assert result.success is False
+
+    def test_steps_completed(self):
+        """Test tracking completed steps."""
+        result = ProcessingResult(records=[])
+        result.steps_completed.append("enrichment")
+        result.steps_completed.append("validation")
+
+        assert len(result.steps_completed) == 2
+        assert "enrichment" in result.steps_completed
+
+
+# ============================================================================
+# VALUE ADD LAYER: ERROR TESTS
+# ============================================================================
+
+class TestValueAddErrors:
+    """Test value-add layer error hierarchy."""
+
+    def test_value_add_error_base(self):
+        """Test base ValueAddError."""
+        with pytest.raises(ValueAddError):
+            raise ValueAddError("Base error")
+
+    def test_enrichment_error(self):
+        """Test EnrichmentError."""
+        with pytest.raises(EnrichmentError):
+            raise EnrichmentError("Enrichment failed")
+
+    def test_transformation_error(self):
+        """Test TransformationError."""
+        with pytest.raises(TransformationError):
+            raise TransformationError("Transformation failed")
+
+    def test_validation_error(self):
+        """Test ValueAddValidationError."""
+        with pytest.raises(ValueAddValidationError):
+            raise ValueAddValidationError("Validation failed")
+
+    def test_aggregation_error(self):
+        """Test AggregationError."""
+        with pytest.raises(AggregationError):
+            raise AggregationError("Aggregation failed")
+
+    def test_error_inheritance(self):
+        """Test that all errors inherit from ValueAddError."""
+        assert issubclass(EnrichmentError, ValueAddError)
+        assert issubclass(TransformationError, ValueAddError)
+        assert issubclass(ValueAddValidationError, ValueAddError)
+        assert issubclass(AggregationError, ValueAddError)
+
+
+# ============================================================================
+# VALUE ADD LAYER: INTEGRATION TESTS
+# ============================================================================
+
+class TestValueAddLayerIntegration:
+    """Integration tests for value_add_layer with multi_file_input."""
+
+    def test_multi_file_input_to_value_add(self, tmp_path):
+        """Integration: Multi-File Input -> Value Add Layer."""
+        csv_file = tmp_path / "sales.csv"
+        csv_file.write_text(
+            "product,quantity,price\nWidget A,10,29.99\nWidget B,5,49.99\n",
+            encoding="utf-8"
+        )
+
+        pipeline = DataIngestionPipeline()
+        normalized = pipeline.ingest(
+            source=str(csv_file),
+            channel_type="file",
+            file_type="csv"
+        )
+
+        records = [r["_source"] for r in normalized["records"]]
+
+        value_add_pipeline = ValueAddPipeline()
+        result = value_add_pipeline.process(
+            records,
+            enrichment_rules=[CalculateRule("total", "quantity * price")],
+            validation_rules=[RequiredRule("product"), TypeRule("total", (int, float))]
+        )
+
+        assert result.success
+        assert result.records[0]["total"] == 299.9
+
+    def test_content_sampler_to_value_add(self, tmp_path):
+        """Integration: Content Sampler -> Value Add Layer."""
+        data = [
+            {"id": i, "name": f"Product {i}", "price": 10 * i, "quantity": i}
+            for i in range(1, 11)
+        ]
+
+        sampler = ContentSampler()
+        sampled = sampler.sample(data, sample_size=5, strategy="random")
+        sampled_records = [r for r in sampled if "_sample_index" in r]
+        sampled_records = data[:5]
+
+        value_add_pipeline = ValueAddPipeline()
+        result = value_add_pipeline.process(
+            sampled_records,
+            enrichment_rules=[
+                CalculateRule("total_value", "price * quantity"),
+                CategoryMapRule(
+                    "quantity_tier", "quantity",
+                    [(0, 3), (3, 6), (6, 10)],
+                    ["low", "medium", "high"]
+                )
+            ]
+        )
+
+        assert result.success
+        assert result.records[0]["total_value"] == 10
+        assert result.records[0]["quantity_tier"] == "low"
+
+
+class TestValueAddLayerFullPipeline:
+    """Test full value-add layer pipeline with all components."""
+
+    def test_complete_data_quality_pipeline(self):
+        """Complete pipeline: ingest -> sample -> enrich -> validate -> aggregate."""
+        records = [
+            {"region": "North", "product": "A", "quantity": 5, "unit_price": 100, "discount": 0.1},
+            {"region": "North", "product": "B", "quantity": 3, "unit_price": 200, "discount": 0.15},
+            {"region": "South", "product": "A", "quantity": 10, "unit_price": 150, "discount": 0.05},
+            {"region": "South", "product": "B", "quantity": 2, "unit_price": 80, "discount": 0.2},
+            {"region": "East", "product": "C", "quantity": 1, "unit_price": 500, "discount": 0.0},
+        ]
+
+        pipeline = ValueAddPipeline()
+
+        enrichment_rules = [
+            CalculateRule("subtotal", "quantity * unit_price"),
+            CalculateRule("discount_amount", "subtotal * discount"),
+            CalculateRule("total", "subtotal - discount_amount"),
+            CategoryMapRule(
+                "size_tier", "quantity",
+                [(0, 3), (3, 7), (7, 100)],
+                ["small", "medium", "large"]
+            ),
+        ]
+
+        validation_rules = [
+            RequiredRule("region"),
+            RequiredRule("product"),
+            TypeRule("quantity", int),
+            TypeRule("unit_price", (int, float)),
+            RangeRule("discount", min_val=0, max_val=1),
+        ]
+
+        aggregation_config = {
+            "group_by": ["region"],
+            "aggregations": {
+                "total_revenue": "sum,total",
+                "avg_discount": "mean,discount",
+                "order_count": "count",
+            }
+        }
+
+        result = pipeline.process(
+            records,
+            enrichment_rules=enrichment_rules,
+            validation_rules=validation_rules,
+            aggregation_config=aggregation_config
+        )
+
+        assert result.success
+        assert len(result.steps_completed) == 3
+
+        assert len(result.records) == 3
+        north_result = next(r for r in result.records if r.get("region") == "North")
+        assert north_result["order_count"] == 2
+
+    def test_data_quality_pipeline_with_failures(self):
+        """Pipeline with data quality issues - validation errors."""
+        records = [
+            {"region": "North", "quantity": 5, "unit_price": 100},
+            {"region": "South", "quantity": 3, "unit_price": None},  # Missing unit_price
+            {"region": "East", "quantity": 2, "unit_price": 50},
+        ]
+
+        pipeline = ValueAddPipeline()
+        result = pipeline.process(
+            records,
+            validation_rules=[
+                RequiredRule("unit_price"),
+            ]
+        )
+
+        assert len(result.errors) > 0
+        assert not result.success
 
 
 # ============================================================================

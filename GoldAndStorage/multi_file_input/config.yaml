@@ -1,0 +1,46 @@
+# Multi-File Input System Configuration
+
+channels:
+  file:
+    watch_directories:
+      - ./data/incoming
+      - ./data/uploads
+    auto_detect_type: true
+
+  api:
+    base_url: "https://api.example.com"
+    timeout: 30
+    retry_count: 3
+    auth:
+      type: oauth2
+      token_url: "https://auth.example.com/token"
+
+  stream:
+    type: kafka
+    bootstrap_servers:
+      - localhost:9092
+    consumer_group: data_processor
+
+  iot:
+    platform: aws_iot
+    region: us-east-1
+    edge_compute: false
+
+  database:
+    poll_interval: 60
+    change_detection: true
+
+file_types:
+  csv:
+    delimiter: ","
+    encoding: utf-8
+    has_header: true
+
+  excel:
+    sheet: 0
+    has_header: true
+
+normalizer:
+  include_raw: false
+  generate_ids: true
+  snake_case_keys: true

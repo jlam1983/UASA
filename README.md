@@ -1,4 +1,4 @@
-Unified AI-Native Systems Architecture (UASA)
+<img width="439" height="336" alt="image" src="https://github.com/user-attachments/assets/b06e736e-db2c-4dcf-8dd3-113595f16652" />Unified AI-Native Systems Architecture (UASA)
 An open-source, modular framework designed to bridge the gap between unstructured real-world assets, composable execution engines, and dynamic user interfaces.
 
 Modern software architectures decouple data from execution, creating massive development overhead and rigid user experiences. This framework provides an end-to-end blueprint and engine to ingest data seamlessly, manage automated processes via LLMs, and dynamically generate delivery platforms on the fly.
@@ -6,21 +6,8 @@ Modern software architectures decouple data from execution, creating massive dev
 🏗️ Core Architectural Pillars
 The framework is built around four highly decoupled, scalable pillars:
 
-┌────────────────────────────────────────────────────────┐
-│             1. Gold & Storage (Data Engine)            │
-└───────────────────────────┬────────────────────────────┘
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│             2. Tool Pooler (Capability Pool)           │
-└───────────────────────────┬────────────────────────────┘
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│             3. Process Glue (Orchestration)            │
-└───────────────────────────┬────────────────────────────┘
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│             4. Agent & Cross-Platform (Delivery UI)    │
-└────────────────────────────────────────────────────────┘
+<img width="439" height="336" alt="image" src="https://github.com/user-attachments/assets/ac94d202-3e64-47bb-bb2b-935c4f85dd25" />
+
 Gold & Storage (Data Engine): Automates the ingestion pipeline. Moves data from raw Source ──> Standardize (via Vision LLMs) ──> Storage (Dual SQL/Vector) ──> Renew ──> Add Value.
 
 Tool Pooler (Capability Pool): Decouples execution engines into isolated, reusable pools containing AI Builders/Usagers, Python code execution, API abstractions, and raw system logic.
@@ -36,14 +23,10 @@ Historically, tracking unstructured physical or digital documents (receipts, inv
 
 This framework solves the data entry barrier by leveraging an optimized Few-Shot In-Context Vision Pipeline. By utilizing localized Vision-LLMs alongside a curated set of sample templates, the engine automatically extracts, normalizes, and validates chaotic real-world data into structured, predictable schemas.
 
-[Chaotic Input]              [Few-Shot Learning]            [Standardized Storage]
-(Image/PDF/Text)               (10-Sample Base)                   (SQL / Vector)
-       │                              │                                 │
-       ▼                              ▼                                 ▼
-┌──────────────┐              ┌──────────────┐                  ┌──────────────┐
-│ Ingest Hook  │ ───────────> │ Vision LLM   │ ───────────────> │ Pydantic     │
-│ (Email/Photo)│              │ Extraction   │                  │ DB Storage   │
-└──────────────┘              └──────────────┘                  └──────────────┘
+
+<img width="672" height="186" alt="image" src="https://github.com/user-attachments/assets/fe5de47d-45d9-439e-9d65-f7854c2e7d3a" />
+
+
 Why This Method Works:
 Zero Manual Input: Transforms the barrier of data entry from typing to simple capturing (a snapshot, an email redirect, or a PDF stream).
 

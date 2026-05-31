@@ -1,4 +1,4 @@
-<img width="439" height="336" alt="image" src="https://github.com/user-attachments/assets/b06e736e-db2c-4dcf-8dd3-113595f16652" />Unified AI-Native Systems Architecture (UASA)
+Unified AI-Native Systems Architecture (UASA)
 An open-source, modular framework designed to bridge the gap between unstructured real-world assets, composable execution engines, and dynamic user interfaces.
 
 Modern software architectures decouple data from execution, creating massive development overhead and rigid user experiences. This framework provides an end-to-end blueprint and engine to ingest data seamlessly, manage automated processes via LLMs, and dynamically generate delivery platforms on the fly.
@@ -36,18 +36,3 @@ Dual-Engine Utility: Processes data simultaneously into Relational DBs (for dete
 
 🚀 Getting Started & Roadmap
 We are currently open-sourcing the initial components of the Gold & Storage pipeline, including the asynchronous extraction engine and schema configuration setups.
-
-[ ] Phase 1: Core Data Pipeline & Few-Shot LLM Extractor (Current Focus)
-
-[ ] Phase 2: Tool Pooler Integration (FastAPI Ecosystem)
-
-[ ] Phase 3: Process Glue state engines
-
-[ ] Phase 4: Generative GUI Auto Builder
-
-💡 Tips for Customization before you push:
-Replace Unified AI-Native Systems Architecture (UASA) with the actual name of your project if you have chosen one.
-
-Under Getting Started, you can add simple installation commands once your repository structure is ready (e.g., pip install -r requirements.txt).
-
-When you drop your actual directory structure or python pipeline script here, we can draft the quickstart code snippet section to go right below this introduction!

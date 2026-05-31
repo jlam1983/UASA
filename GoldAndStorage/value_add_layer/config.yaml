@@ -1,0 +1,54 @@
+# Value Add Layer Configuration
+
+enrichment:
+  rules:
+    - type: calculate
+      target: total_value
+      expression: "quantity * unit_price"
+    - type: category_map
+      target: age_group
+      source: age
+      ranges:
+        - [0, 18]
+        - [18, 35]
+        - [35, 55]
+        - [55, 150]
+      labels:
+        - minor
+        - young_adult
+        - adult
+        - senior
+
+transformation:
+  normalize:
+    fields:
+      - price
+      - quantity
+    method: min_max
+
+  encode:
+    - field: status
+      method: label
+    - field: category
+      method: one_hot
+
+validation:
+  rules:
+    - field: id
+      type: required
+    - field: price
+      type: range
+      min: 0
+      max: 100000
+    - field: email
+      type: pattern
+      pattern: "^[\w.-]+@[\w.-]+\.\w+$"
+
+aggregation:
+  group_by:
+    - region
+    - product_category
+  aggregations:
+    total_sales: sum,amount
+    order_count: count
+    avg_value: mean,amount

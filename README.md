@@ -1,4 +1,4 @@
-Unified AI-Native Systems Architecture (UASA)
+(Beta Version) Unified AI-Native Systems Architecture (UASA)
 An open-source, modular framework designed to bridge the gap between unstructured real-world assets, composable execution engines, and dynamic user interfaces.
 
 Modern software architectures decouple data from execution, creating massive development overhead and rigid user experiences. This framework provides an end-to-end blueprint and engine to ingest data seamlessly, manage automated processes via LLMs, and dynamically generate delivery platforms on the fly.
